@@ -1,0 +1,26 @@
+{
+    "rcon": {
+        "servers": [
+            {
+                "address": "1.2.3.4:27020",
+                "name": "My Server Name",
+                "password": "My Server Password"
+            },
+            {
+                "address": "1.2.3.4:27021",
+                "name": "My Second Server Name",
+                "password": "My Second Server Password"
+            }
+        ],
+        "queryEverySeconds": 60
+    },
+    "discord": {
+        "channelIDStatus": "12345",
+        "channelIDJoinLeave": "12345",
+        "botToken": "My Bot Token",
+        "showJoinLeave": true,
+        "pinPlayerList": true,
+        "cachePath": "C:\\lazydodobot\\cache.txt"
+    },
+    "logFile": "C:\\lazydodobot\\app.log"
+}

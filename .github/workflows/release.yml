@@ -1,0 +1,80 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: Release bot
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25.7"
+
+      - name: Build
+        run: |
+          export BUILD_VERSION=${{ github.ref_name }}
+          ./create_binaries.sh
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Packages
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          export BUILD_VERSION=${{ github.ref_name }}
+          export IMAGE=ghcr.io/${{ github.repository }}
+
+          cp lazydodobot.linux-amd64 build/lazydodobot.linux-amd64
+          cp lazydodobot.linux-arm64 build/lazydodobot.linux-arm64
+          cd build
+
+          docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --build-arg VERSION=${VERBUILD_VERSIONSION} \
+              -t ${IMAGE}:${BUILD_VERSION} \
+              -t ${IMAGE}:latest \
+              --push \
+              .
+
+      - name: Create windows service bundle
+        run: |
+          cp lazydodobot.windows-amd64.exe windows/
+          cd windows/
+          zip lazydodobot-windows-service.zip lazydodobot.windows-amd64.exe example_config.json  install-lazydodobot-service.ps1 uninstall-lazydodobot-service.ps1
+          mv lazydodobot-windows-service.zip ../
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            lazydodobot.darwin-amd64
+            lazydodobot.darwin-arm64
+            lazydodobot.linux-amd64
+            lazydodobot.linux-arm64
+            lazydodobot.windows-amd64.exe
+            lazydodobot-windows-service.zip
