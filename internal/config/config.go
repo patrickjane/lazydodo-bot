@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var Version string
@@ -25,13 +26,20 @@ type ConfigRcon struct {
 }
 
 type ConfigDiscord struct {
-	ChannelIDStatus    string `json:"channelIDStatus"`
-	ChannelIDJoinLeave string `json:"channelIDJoinLeave"`
-	BotToken           string `json:"botToken"`
-	Tag                string `json:"tag"`
-	CachePath          string `json:"cachePath"`
-	ShowJoinLeave      bool   `json:"showJoinLeave"`
-	PinPlayerList      bool   `json:"pinPlayerList"`
+	ChannelIDStatus     string `json:"channelIDStatus"`
+	ChannelIDJoinLeave  string `json:"channelIDJoinLeave"`
+	ChannelIDJoinEvents string `json:"channelIDEvents"`
+	BotToken            string `json:"botToken"`
+	Tag                 string `json:"tag"`
+	CachePath           string `json:"cachePath"`
+	ShowJoinLeave       bool   `json:"showJoinLeave"`
+	PinPlayerList       bool   `json:"pinPlayerList"`
+
+	Eventer struct {
+		Enabled            bool            `json:"enabled"`
+		ReminderOffsets    []time.Duration `json:""`
+		ReminderOffsetsRaw []string        `json:"reminderOffsets"`
+	} `json:"eventer"`
 }
 
 type Config struct {
@@ -41,7 +49,9 @@ type Config struct {
 	LogFile string `json:"logFile"`
 }
 
-func ParseConfig() Config {
+var GlobalConfig Config
+
+func ParseConfig() {
 	res := _parseConfig()
 
 	if res.Rcon.Servers == nil || len(res.Rcon.Servers) == 0 {
@@ -79,7 +89,31 @@ func ParseConfig() Config {
 		res.LogFile = "-"
 	}
 
-	return res
+	if len(res.Discord.Eventer.ReminderOffsets) == 0 {
+		if len(res.Discord.Eventer.ReminderOffsetsRaw) > 0 {
+			o, err := parseDurations(res.Discord.Eventer.ReminderOffsetsRaw)
+
+			if err != nil {
+				slog.Info(fmt.Sprintf("Failed to parse reminder offsets: %s", err))
+				os.Exit(1)
+			}
+
+			res.Discord.Eventer.ReminderOffsets = o
+		} else {
+			res.Discord.Eventer.ReminderOffsets = []time.Duration{
+				24 * time.Hour,
+				2 * time.Hour,
+				15 * time.Minute,
+			}
+		}
+	}
+
+	if res.Discord.ChannelIDJoinEvents == "-" && res.Discord.Eventer.Enabled {
+		slog.Info(fmt.Sprintf("Missing eventer channel definition"))
+		os.Exit(1)
+	}
+
+	GlobalConfig = res
 }
 
 func _parseConfig() Config {
@@ -111,6 +145,8 @@ func _parseConfig() Config {
 
 	readString("DISCORD_CHANNEL_ID_STATUS", &res.Discord.ChannelIDStatus, "")
 	readString("DISCORD_CHANNEL_ID_JOINLEAVE", &res.Discord.ChannelIDJoinLeave, res.Discord.ChannelIDStatus)
+	readString("DISCORD_CHANNEL_ID_EVENTS", &res.Discord.ChannelIDJoinEvents, "-")
+
 	readString("DISCORD_BOT_TOKEN", &res.Discord.BotToken, "")
 	readString("DISCORD_MESSAGE_TAG", &res.Discord.Tag, "lazydodobot")
 	readString("DISCORD_CACHE_PATH", &res.Discord.CachePath, "cache.txt")
@@ -118,6 +154,17 @@ func _parseConfig() Config {
 	readBool("DISCORD_PIN_PLAYERLIST", &res.Discord.PinPlayerList, "true")
 
 	readInt("RCON_QUERY_EVERY_S", &res.Rcon.QueryEverySeconds, "60")
+
+	readBool("EVENTER_ENABLED", &res.Discord.Eventer.Enabled, "false")
+
+	eventerRemindersList := ""
+	readString("EVENTER_RMINDERS", &eventerRemindersList, "")
+
+	for _, e := range strings.Split(eventerRemindersList, ",") {
+		if len(strings.Trim(e, " ")) > 0 {
+			res.Discord.Eventer.ReminderOffsetsRaw = append(res.Discord.Eventer.ReminderOffsetsRaw, strings.Trim(e, " "))
+		}
+	}
 
 	var rconServers string
 
@@ -170,6 +217,50 @@ func parseRconServers(cfg *Config, envValue string) error {
 	}
 
 	return nil
+}
+
+func parseDurationString(s string) (time.Duration, error) {
+	parts := strings.Fields(strings.TrimSpace(s))
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid duration format: %q", s)
+	}
+
+	// Parse number
+	value, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number in duration %q: %w", s, err)
+	}
+
+	unit := strings.ToLower(parts[1])
+
+	switch unit {
+	case "minute", "minutes":
+		return time.Duration(value) * time.Minute, nil
+	case "hour", "hours":
+		return time.Duration(value) * time.Hour, nil
+	case "day", "days":
+		return time.Duration(value) * 24 * time.Hour, nil
+	case "week", "weeks":
+		return time.Duration(value) * 7 * 24 * time.Hour, nil
+	default:
+		return 0, fmt.Errorf("invalid unit in duration %q", s)
+	}
+}
+
+func parseDurations(durations []string) ([]time.Duration, error) {
+	var res []time.Duration
+
+	for _, s := range durations {
+		d, err := parseDurationString(s)
+
+		if err != nil {
+			return res, err
+		}
+
+		res = append(res, d)
+	}
+
+	return res, nil
 }
 
 func readString(name string, target *string, defaultVal string) {
