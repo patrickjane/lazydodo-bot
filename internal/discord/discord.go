@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	_ "time/tzdata"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/patrickjane/lazydodo-bot/internal/config"
 	"github.com/patrickjane/lazydodo-bot/internal/model"
