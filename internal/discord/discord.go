@@ -227,7 +227,7 @@ func (bot *DiscordBot) updatePlayerList(existingMessageId string, serverStatusMa
 	// assemble message payload from server infos
 
 	payload := &discordgo.MessageSend{
-		Content: fmt.Sprintf("# Online players\nFrom: <%s>", config.GlobalConfig.Discord.Tag),
+		Content: fmt.Sprintf("# Online players"),
 	}
 
 	keys := make([]string, 0, len(serverStatusMap))
@@ -322,7 +322,7 @@ func (bot *DiscordBot) fetchExistingMessage(existingMessageId string) (*discordg
 	}
 
 	for _, m := range msgs {
-		if m.Author != nil && m.Author.ID == bot.userID && strings.Contains(m.Content, config.GlobalConfig.Discord.Tag) {
+		if m.Author != nil && m.Author.ID == bot.userID && strings.Contains(m.Content, "Online players") {
 			return m, nil
 		}
 	}

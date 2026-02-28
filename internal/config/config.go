@@ -30,7 +30,6 @@ type ConfigDiscord struct {
 	ChannelIDJoinLeave  string `json:"channelIDJoinLeave"`
 	ChannelIDJoinEvents string `json:"channelIDEvents"`
 	BotToken            string `json:"botToken"`
-	Tag                 string `json:"tag"`
 	CachePath           string `json:"cachePath"`
 	ShowJoinLeave       bool   `json:"showJoinLeave"`
 	PinPlayerList       bool   `json:"pinPlayerList"`
@@ -73,10 +72,6 @@ func ParseConfig() {
 		res.Discord.ChannelIDJoinLeave = res.Discord.ChannelIDStatus
 	}
 
-	if res.Discord.Tag == "" {
-		res.Discord.Tag = "lazydodobot"
-	}
-
 	if res.Discord.CachePath == "" {
 		res.Discord.CachePath = "cache.txt"
 	}
@@ -108,7 +103,7 @@ func ParseConfig() {
 		}
 	}
 
-	if res.Discord.ChannelIDJoinEvents == "-" && res.Discord.Eventer.Enabled {
+	if (res.Discord.ChannelIDJoinEvents == "-" || res.Discord.ChannelIDJoinEvents == "") && res.Discord.Eventer.Enabled {
 		slog.Info(fmt.Sprintf("Missing eventer channel definition"))
 		os.Exit(1)
 	}
@@ -148,7 +143,6 @@ func _parseConfig() Config {
 	readString("DISCORD_CHANNEL_ID_EVENTS", &res.Discord.ChannelIDJoinEvents, "-")
 
 	readString("DISCORD_BOT_TOKEN", &res.Discord.BotToken, "")
-	readString("DISCORD_MESSAGE_TAG", &res.Discord.Tag, "lazydodobot")
 	readString("DISCORD_CACHE_PATH", &res.Discord.CachePath, "cache.txt")
 	readBool("DISCORD_SHOW_JOINLEAVE", &res.Discord.ShowJoinLeave, "true")
 	readBool("DISCORD_PIN_PLAYERLIST", &res.Discord.PinPlayerList, "true")
