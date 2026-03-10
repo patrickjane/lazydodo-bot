@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/bwmarrin/discordgo"
 	_ "github.com/go-sql-driver/mysql"
@@ -31,6 +33,8 @@ type ChatMessage struct {
 	Mode        int
 	isPm        int
 	PmRecipient string
+
+	MapPrefix string
 }
 
 func NewCrossChat() (*CrossChat, error) {
@@ -106,7 +110,7 @@ func (s *CrossChat) Run(session *discordgo.Session, fromDiscord <-chan ChatMessa
 				_, err := session.WebhookExecute(cfg.Config.Crosschat.WebhookIdCrosschat, cfg.Config.Crosschat.WebhookTokenCrosschat,
 					false, &discordgo.WebhookParams{
 						Content:  m.Message,
-						Username: m.Sender,
+						Username: fmt.Sprintf("[%s] %s (%s)", m.MapPrefix, m.Sender, m.TribeName),
 					})
 
 				if err != nil {
@@ -150,6 +154,8 @@ func (s *CrossChat) fetchChatMessages(lastId uint64) ([]ChatMessage, error) {
 			slog.Error(fmt.Sprintf("Failed to deserialize row for chat messages: %s", err))
 			continue
 		}
+
+		row.MapPrefix = generatePrefixFromMap(row.Map)
 
 		res = append(res, row)
 	}
@@ -200,4 +206,33 @@ func (s *CrossChat) insertChatRow(sender string, message string) error {
 	}
 
 	return nil
+}
+
+func generatePrefixFromMap(s string) string {
+	// Remove suffix
+	name := strings.TrimSuffix(s, "_WP")
+
+	if name == "BobsMissions" {
+		return "Club Ark"
+	}
+
+	// Collect uppercase letters
+	var caps []rune
+	for _, r := range name {
+		if unicode.IsUpper(r) {
+			caps = append(caps, r)
+		}
+	}
+
+	// CamelCase case
+	if len(caps) >= 2 {
+		return strings.ToUpper(string(caps[:2]))
+	}
+
+	// Regular word case
+	if len(name) >= 2 {
+		return strings.ToUpper(name[:2])
+	}
+
+	return strings.ToUpper(name)
 }

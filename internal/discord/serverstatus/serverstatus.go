@@ -133,7 +133,7 @@ func (s *ServerStatus) updatePlayerList(existingMessageId string, serverStatusMa
 				players = append(players, fmt.Sprintf("- %s (%s)", player.Name, player.Tribe))
 			}
 
-			body = "Players:\n" + strings.Join(players, "\n")
+			body = strings.Join(players, "\n")
 		}
 
 		if !serverInfo.Reachable {
@@ -143,11 +143,8 @@ func (s *ServerStatus) updatePlayerList(existingMessageId string, serverStatusMa
 
 		payload.Embeds = append(payload.Embeds, &discordgo.MessageEmbed{
 			Title:       serverName,
-			Description: body,
+			Description: fmt.Sprintf("> Day: %d • Time: %s • Version: %s\n\n%s", serverInfo.Day, serverInfo.Time, serverInfo.ServerVersion, body),
 			Color:       color,
-			Footer: &discordgo.MessageEmbedFooter{
-				Text: fmt.Sprintf("Day: %d, time: %s", serverInfo.Day, serverInfo.Time),
-			},
 		})
 	}
 
