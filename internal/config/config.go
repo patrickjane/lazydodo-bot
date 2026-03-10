@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -17,6 +16,7 @@ var Version string
 type ConfigRconServer struct {
 	Address  string `json:"address"`
 	Name     string `json:"name"`
+	Map      string `json:"map"`
 	Password string `json:"password"`
 }
 
@@ -25,192 +25,151 @@ type ConfigRcon struct {
 	QueryEverySeconds int                `json:"queryEverySeconds"`
 }
 
-type ConfigDiscord struct {
-	ChannelIDStatus     string `json:"channelIDStatus"`
-	ChannelIDJoinLeave  string `json:"channelIDJoinLeave"`
-	ChannelIDJoinEvents string `json:"channelIDEvents"`
-	BotToken            string `json:"botToken"`
-	CachePath           string `json:"cachePath"`
-	ShowJoinLeave       bool   `json:"showJoinLeave"`
-	PinPlayerList       bool   `json:"pinPlayerList"`
+type ConfigRoot struct {
+	LogFile   string `json:"logFile"`
+	CachePath string `json:"cachePath"`
 
-	Eventer struct {
-		Enabled            bool            `json:"enabled"`
-		ReminderOffsets    []time.Duration `json:""`
+	BotToken string `json:"botToken"`
+
+	ServerStatus *struct {
+		Rcon ConfigRcon `json:"rcon"`
+
+		DbConnection       string `json:"DbConnection"`
+		ChannelID          string `json:"channelID"`
+		ChannelIDJoinLeave string `json:"channelIDJoinLeave"`
+		ShowJoinLeave      bool   `json:"showJoinLeave"`
+	} `json:"serverStatus,ommitempty"`
+
+	Eventer *struct {
+		ChannelID          string          `json:"channelID"`
+		ReminderOffsets    []time.Duration `json:"-"`
 		ReminderOffsetsRaw []string        `json:"reminderOffsets"`
-	} `json:"eventer"`
+	} `json:"eventer,ommitempty"`
+
+	Crosschat *struct {
+		ChannelID             string `json:"channelID"`
+		DbConnection          string `json:"DbConnection"`
+		WebhookCrosschat      string `json:"WebhookCrosschat"`
+		WebhookIdCrosschat    string `json:"-"`
+		WebhookTokenCrosschat string `json:"-"`
+	} `json:"crosschat,ommitempty"`
 }
 
-type Config struct {
-	Rcon    ConfigRcon    `json:"rcon"`
-	Discord ConfigDiscord `json:"discord"`
-
-	LogFile string `json:"logFile"`
-}
-
-var GlobalConfig Config
+var Config ConfigRoot
 
 func ParseConfig() {
-	res := _parseConfig()
-
-	if res.Rcon.Servers == nil || len(res.Rcon.Servers) == 0 {
-		slog.Info(fmt.Sprintf("No RCON servers configured"))
-		os.Exit(1)
-	}
-
-	if res.Discord.BotToken == "" {
-		slog.Info(fmt.Sprintf("No discord bot token configured"))
-		os.Exit(1)
-	}
-
-	if res.Discord.ChannelIDStatus == "" {
-		slog.Info(fmt.Sprintf("No discord channel ID configured"))
-		os.Exit(1)
-	}
-
-	if res.Discord.ChannelIDJoinLeave == "" {
-		res.Discord.ChannelIDJoinLeave = res.Discord.ChannelIDStatus
-	}
-
-	if res.Discord.CachePath == "" {
-		res.Discord.CachePath = "cache.txt"
-	}
-
-	if res.Rcon.QueryEverySeconds == 0 {
-		res.Rcon.QueryEverySeconds = 60
-	}
-
-	if res.LogFile == "" {
-		res.LogFile = "-"
-	}
-
-	if len(res.Discord.Eventer.ReminderOffsets) == 0 {
-		if len(res.Discord.Eventer.ReminderOffsetsRaw) > 0 {
-			o, err := parseDurations(res.Discord.Eventer.ReminderOffsetsRaw)
-
-			if err != nil {
-				slog.Info(fmt.Sprintf("Failed to parse reminder offsets: %s", err))
-				os.Exit(1)
-			}
-
-			res.Discord.Eventer.ReminderOffsets = o
-		} else {
-			res.Discord.Eventer.ReminderOffsets = []time.Duration{
-				24 * time.Hour,
-				2 * time.Hour,
-				15 * time.Minute,
-			}
-		}
-	}
-
-	if (res.Discord.ChannelIDJoinEvents == "-" || res.Discord.ChannelIDJoinEvents == "") && res.Discord.Eventer.Enabled {
-		slog.Info(fmt.Sprintf("Missing eventer channel definition"))
-		os.Exit(1)
-	}
-
-	GlobalConfig = res
-}
-
-func _parseConfig() Config {
-	var res Config
-	res.Rcon.Servers = make([]ConfigRconServer, 0)
-	res.LogFile = "-"
-
 	var configFile string
 	flag.StringVar(&configFile, "config-file", "", "Path to the JSON configuration file")
 	flag.Parse()
 
-	if configFile != "" {
-		dat, err := os.ReadFile(configFile)
-
-		if err != nil {
-			slog.Info(fmt.Sprintf("Failed to read config file %s: %s", configFile, err))
-			os.Exit(1)
-		}
-
-		if err = json.Unmarshal(dat, &res); err != nil {
-			slog.Info(fmt.Sprintf("Failed to parse config file %s: %s", configFile, err))
-			os.Exit(1)
-		}
-
-		return res
+	if configFile == "" {
+		configFile = "config.json"
 	}
 
-	readString("LOG_FILE", &res.LogFile, "-")
-
-	readString("DISCORD_CHANNEL_ID_STATUS", &res.Discord.ChannelIDStatus, "")
-	readString("DISCORD_CHANNEL_ID_JOINLEAVE", &res.Discord.ChannelIDJoinLeave, res.Discord.ChannelIDStatus)
-	readString("DISCORD_CHANNEL_ID_EVENTS", &res.Discord.ChannelIDJoinEvents, "-")
-
-	readString("DISCORD_BOT_TOKEN", &res.Discord.BotToken, "")
-	readString("DISCORD_CACHE_PATH", &res.Discord.CachePath, "cache.txt")
-	readBool("DISCORD_SHOW_JOINLEAVE", &res.Discord.ShowJoinLeave, "true")
-	readBool("DISCORD_PIN_PLAYERLIST", &res.Discord.PinPlayerList, "true")
-
-	readInt("RCON_QUERY_EVERY_S", &res.Rcon.QueryEverySeconds, "60")
-
-	readBool("EVENTER_ENABLED", &res.Discord.Eventer.Enabled, "false")
-
-	eventerRemindersList := ""
-	readString("EVENTER_RMINDERS", &eventerRemindersList, "")
-
-	for _, e := range strings.Split(eventerRemindersList, ",") {
-		if len(strings.Trim(e, " ")) > 0 {
-			res.Discord.Eventer.ReminderOffsetsRaw = append(res.Discord.Eventer.ReminderOffsetsRaw, strings.Trim(e, " "))
-		}
-	}
-
-	var rconServers string
-
-	readString("RCON_SERVERS", &rconServers, "")
-
-	err := parseRconServers(&res, rconServers)
+	dat, err := os.ReadFile(configFile)
 
 	if err != nil {
-		slog.Error(fmt.Sprintf("Failed to parse env variable RCON_SERVERS: %s", err))
+		slog.Info(fmt.Sprintf("Failed to read config file %s: %s", configFile, err))
 		os.Exit(1)
 	}
 
-	return res
-}
-
-func parseRconServers(cfg *Config, envValue string) error {
-	// parse: ADDRESS1,NAME1,PASSWORD1;ADDRESS2,NAME2,PASSWORD2;ADDRESS3,NAME3,PASSWORD3
-	// example: RCON_SERVERS="10.0.0.1:27015,Main Server,secret123;10.0.0.2:27015,Backup Server,backup456"
-
-	if strings.TrimSpace(envValue) == "" {
-		return errors.New("RCON_SERVERS env variable is empty")
+	if err = json.Unmarshal(dat, &Config); err != nil {
+		slog.Info(fmt.Sprintf("Failed to parse config file %s: %s", configFile, err))
+		os.Exit(1)
 	}
 
-	entries := strings.Split(envValue, ";")
+	// -------------
+	// cache
+	// -------------
 
-	for idx, entry := range entries {
-		entry = strings.TrimSpace(entry)
-
-		if entry == "" {
-			continue // skip empty entries
-		}
-
-		parts := strings.Split(entry, ",")
-
-		if len(parts) != 3 {
-			return fmt.Errorf("invalid server entry #%d: expected 3 comma-separated fields, got %d (%q)", idx+1, len(parts), entry)
-		}
-
-		server := ConfigRconServer{
-			Address:  strings.TrimSpace(parts[0]),
-			Name:     strings.TrimSpace(parts[1]),
-			Password: strings.TrimSpace(parts[2]),
-		}
-
-		if server.Address == "" || server.Name == "" || server.Password == "" {
-			return fmt.Errorf("invalid server entry #%d: fields must not be empty (%q)", idx+1, entry)
-		}
-
-		cfg.Rcon.Servers = append(cfg.Rcon.Servers, server)
+	if Config.CachePath == "" {
+		Config.CachePath = "cache.json"
 	}
 
-	return nil
+	// -------------
+	// Discord
+	// -------------
+
+	if Config.BotToken == "" {
+		slog.Info(fmt.Sprintf("No discord bot token configured"))
+		os.Exit(1)
+	}
+
+	if Config.ServerStatus != nil {
+		if Config.ServerStatus.Rcon.Servers == nil || len(Config.ServerStatus.Rcon.Servers) == 0 {
+			slog.Info(fmt.Sprintf("No RCON servers configured"))
+			os.Exit(1)
+		}
+
+		if Config.ServerStatus.Rcon.QueryEverySeconds == 0 {
+			Config.ServerStatus.Rcon.QueryEverySeconds = 60
+		}
+
+		if Config.ServerStatus.ChannelID == "" {
+			slog.Info(fmt.Sprintf("No discord channel ID configured for server status"))
+			os.Exit(1)
+		}
+
+		if Config.ServerStatus.DbConnection == "" {
+			slog.Info(fmt.Sprintf("No db connection configured for server status"))
+			os.Exit(1)
+		}
+
+		if Config.ServerStatus.ChannelIDJoinLeave == "" {
+			Config.ServerStatus.ChannelIDJoinLeave = Config.ServerStatus.ChannelID
+		}
+
+	}
+
+	if Config.Eventer != nil {
+		if Config.Eventer.ChannelID == "" {
+			slog.Info(fmt.Sprintf("No discord channel ID configured for eventer"))
+			os.Exit(1)
+		}
+
+		if len(Config.Eventer.ReminderOffsets) == 0 {
+			if len(Config.Eventer.ReminderOffsetsRaw) > 0 {
+				o, err := parseDurations(Config.Eventer.ReminderOffsetsRaw)
+
+				if err != nil {
+					slog.Info(fmt.Sprintf("Failed to parse reminder offsets: %s", err))
+					os.Exit(1)
+				}
+
+				Config.Eventer.ReminderOffsets = o
+			} else {
+				Config.Eventer.ReminderOffsets = []time.Duration{
+					24 * time.Hour,
+					2 * time.Hour,
+					15 * time.Minute,
+				}
+			}
+		}
+	}
+
+	if Config.Crosschat != nil {
+		if Config.Crosschat.ChannelID == "" {
+			slog.Info(fmt.Sprintf("No discord channel ID configured for crosschat"))
+			os.Exit(1)
+		}
+
+		if Config.Crosschat.DbConnection == "" {
+			slog.Info(fmt.Sprintf("No db connection configured for crosschat"))
+			os.Exit(1)
+		}
+
+		if Config.Crosschat.WebhookCrosschat != "" {
+			id, token := parseWebhookURL(Config.Crosschat.WebhookCrosschat)
+
+			Config.Crosschat.WebhookIdCrosschat = id
+			Config.Crosschat.WebhookTokenCrosschat = token
+		}
+
+		if len(Config.Crosschat.WebhookIdCrosschat) == 0 || len(Config.Crosschat.WebhookTokenCrosschat) == 0 {
+			slog.Info(fmt.Sprintf("Malformed webhook URL"))
+			os.Exit(1)
+		}
+	}
 }
 
 func parseDurationString(s string) (time.Duration, error) {
@@ -257,55 +216,18 @@ func parseDurations(durations []string) ([]time.Duration, error) {
 	return res, nil
 }
 
-func readString(name string, target *string, defaultVal string) {
-	value := os.Getenv(name)
-
-	if value == "" {
-		if defaultVal != "" {
-			value = defaultVal
-		} else {
-			slog.Error(fmt.Sprintf("Missing env variable %s", name))
-			os.Exit(1)
-		}
-	}
-
-	if target == nil {
-		slog.Error(fmt.Sprintf("Target for env variable %s is nil", name))
-		os.Exit(1)
-	}
-
-	*target = value
+func parseWebhookURL(url string) (string, string) {
+	parts := strings.Split(url, "/")
+	return parts[len(parts)-2], parts[len(parts)-1]
 }
 
-func readInt(name string, target *int, defaultVal string) {
-	var strVal string
+func CleanDbString(dsn string) string {
+	colon := strings.Index(dsn, ":")
+	at := strings.Index(dsn, "@")
 
-	readString(name, &strVal, defaultVal)
-
-	i, err := strconv.Atoi(strVal)
-
-	if err != nil {
-		slog.Error(fmt.Sprintf("Value for env variable %s is not a valid number: %s", name, strVal))
-		os.Exit(1)
+	if colon == -1 || at == -1 || colon > at {
+		return dsn // not in expected format
 	}
 
-	if target == nil {
-		slog.Error(fmt.Sprintf("Target for env variable %s is nil", name))
-		os.Exit(1)
-	}
-
-	*target = i
-}
-
-func readBool(name string, target *bool, defaultVal string) {
-	var strVal string
-
-	readString(name, &strVal, defaultVal)
-
-	if target == nil {
-		slog.Error(fmt.Sprintf("Target for env variable %s is nil", name))
-		os.Exit(1)
-	}
-
-	*target = strings.ToLower(strVal) == "true"
+	return dsn[:colon+1] + dsn[at:]
 }

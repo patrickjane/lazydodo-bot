@@ -11,7 +11,7 @@ import (
 	"github.com/patrickjane/lazydodo-bot/internal/model"
 )
 
-func Run(cfg config.ConfigRcon, updateChan chan<- map[string]*model.ServerInfo, errorChan chan<- error) error {
+func Run(cfg config.ConfigRcon, updateChan chan<- map[string]*model.ServerInfo) error {
 	ticker := time.NewTicker(time.Duration(cfg.QueryEverySeconds) * time.Second)
 	defer ticker.Stop()
 
@@ -20,23 +20,24 @@ func Run(cfg config.ConfigRcon, updateChan chan<- map[string]*model.ServerInfo, 
 	for _, rconServerConf := range cfg.Servers {
 		ifos[rconServerConf.Name] = &model.ServerInfo{
 			Name:      rconServerConf.Name,
+			Map:       rconServerConf.Map,
 			Reachable: true,
-			Players:   make([]string, 0),
+			Players:   make([]model.PlayerInfo, 0),
 		}
 	}
 
 	for range ticker.C {
 		for _, rconServerConfig := range cfg.Servers {
-			players, err := queryServer(rconServerConfig)
+			_, err := queryServer(rconServerConfig)
 
 			if err != nil {
 				slog.Error(fmt.Sprintf("Failed to query server %s: %s", rconServerConfig.Address, err))
 
 				ifos[rconServerConfig.Name].Reachable = false
-				ifos[rconServerConfig.Name].Players = []string{}
+				ifos[rconServerConfig.Name].Players = []model.PlayerInfo{}
 			} else {
 				ifos[rconServerConfig.Name].Reachable = true
-				ifos[rconServerConfig.Name].Players = players
+				ifos[rconServerConfig.Name].Players = []model.PlayerInfo{} // players
 			}
 		}
 
