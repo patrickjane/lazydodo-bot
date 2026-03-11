@@ -16,6 +16,7 @@ import (
 )
 
 const tableServers = "crosschat_servers"
+const discordMessageTitle = "# Server status"
 
 type ServerStatus struct {
 	Session *discordgo.Session
@@ -109,7 +110,7 @@ func (s *ServerStatus) updatePlayerList(existingMessageId string, serverStatusMa
 	// assemble message payload from server infos
 
 	payload := &discordgo.MessageSend{
-		Content: fmt.Sprintf("# Server status"),
+		Content: discordMessageTitle,
 	}
 
 	keys := make([]string, 0, len(serverStatusMap))
@@ -196,7 +197,7 @@ func (s *ServerStatus) fetchExistingMessage(existingMessageId string) (*discordg
 	}
 
 	for _, m := range msgs {
-		if m.Author != nil && m.Author.ID == s.UserID && strings.Contains(m.Content, "Online players") {
+		if m.Author != nil && m.Author.ID == s.UserID && strings.Contains(m.Content, discordMessageTitle) {
 			return m, nil
 		}
 	}

@@ -2,3 +2,7 @@
 /.env
 /build/lazydodobot
 /discordlazydodobot.txt
+cache.json
+cache.txt
+config.json
+config_prod.json
