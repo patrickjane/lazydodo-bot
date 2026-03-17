@@ -107,10 +107,16 @@ func (s *CrossChat) Run(session *discordgo.Session, fromDiscord <-chan ChatMessa
 			for _, m := range messages {
 				slog.Debug(fmt.Sprintf("Forward message to discord: %d %s", m.Id, m.Message))
 
+				userNameString := fmt.Sprintf("[%s] %s (%s)", m.MapPrefix, m.Sender, m.TribeName)
+
+				if len(m.TribeName) == 0 {
+					userNameString = fmt.Sprintf("[%s] %s", m.MapPrefix, m.Sender)
+				}
+
 				_, err := session.WebhookExecute(cfg.Config.Crosschat.WebhookIdCrosschat, cfg.Config.Crosschat.WebhookTokenCrosschat,
 					false, &discordgo.WebhookParams{
 						Content:  m.Message,
-						Username: fmt.Sprintf("[%s] %s (%s)", m.MapPrefix, m.Sender, m.TribeName),
+						Username: userNameString,
 					})
 
 				if err != nil {

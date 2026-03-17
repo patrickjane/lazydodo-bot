@@ -131,7 +131,13 @@ func (s *ServerStatus) updatePlayerList(existingMessageId string, serverStatusMa
 			players := []string{}
 
 			for _, player := range serverInfo.Players {
-				players = append(players, fmt.Sprintf("- %s (%s)", player.Name, player.Tribe))
+				playerNameString := fmt.Sprintf("- %s (%s)", player.Name, player.Tribe)
+
+				if len(player.Tribe) == 0 {
+					playerNameString = fmt.Sprintf("- %s", player.Name)
+				}
+
+				players = append(players, playerNameString)
 			}
 
 			body = strings.Join(players, "\n")
